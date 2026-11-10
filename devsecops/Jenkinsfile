@@ -1,0 +1,46 @@
+pipeline {
+    agent any
+
+    environment {
+        TRIVY_CACHE = '/var/lib/jenkins/trivy-cache'
+    }
+
+    stages {
+        stage('Build') {
+            steps {
+                echo 'Building the application...'
+                sh 'python3 -m py_compile devsecops/app.py && echo "Build OK: app.py compiles"'
+            }
+        }
+
+        stage('Secret Scan') {
+            steps {
+                echo 'Scanning source for hardcoded secrets...'
+                sh 'trivy fs --cache-dir $TRIVY_CACHE --scanners secret --exit-code 1 devsecops/'
+            }
+        }
+
+        stage('Dependency Scan') {
+            steps {
+                echo 'Scanning dependencies for HIGH/CRITICAL vulnerabilities...'
+                sh 'trivy fs --cache-dir $TRIVY_CACHE --scanners vuln --severity HIGH,CRITICAL --exit-code 1 devsecops/'
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                echo 'Security gate passed. Deploying...'
+                sh 'mkdir -p deploy && cp devsecops/app.py deploy/ && ls -la deploy/'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Secure pipeline passed: application deployed.'
+        }
+        failure {
+            echo 'Security gate FAILED: deployment blocked.'
+        }
+    }
+}
