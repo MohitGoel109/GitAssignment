@@ -1,0 +1,54 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Build') {
+            steps {
+                dir('cicd-testing') {
+                    sh 'python3 -m py_compile app/shop.py app/server.py && echo "Build OK: sources compile"'
+                }
+            }
+        }
+
+        stage('Unit Tests') {
+            steps {
+                dir('cicd-testing') {
+                    sh 'python3 -m pytest tests/unit -v --junitxml=unit-report.xml'
+                }
+            }
+        }
+
+        stage('Integration Tests') {
+            steps {
+                dir('cicd-testing') {
+                    sh 'python3 -m pytest tests/integration -v --junitxml=integration-report.xml'
+                }
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                echo 'All test gates passed. Deploying...'
+                sh 'mkdir -p deploy && cp -r cicd-testing/app deploy/ && ls -la deploy/app'
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                try {
+                    junit allowEmptyResults: true, testResults: 'cicd-testing/*-report.xml'
+                } catch (err) {
+                    echo 'JUnit plugin not available, skipping test report publishing'
+                }
+            }
+        }
+        success {
+            echo 'Pipeline passed: all tests green, application deployed.'
+        }
+        failure {
+            echo 'Test gate FAILED: deployment blocked.'
+        }
+    }
+}
